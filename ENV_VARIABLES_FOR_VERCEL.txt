@@ -1,0 +1,88 @@
+========================================
+VERCEL ENVIRONMENT VARIABLES
+Copy these to Vercel Dashboard
+========================================
+
+REQUIRED VARIABLES (Bắt buộc):
+---
+
+DATABASE_URL
+Value: postgresql://username:password@host:5432/database?schema=public&sslmode=require
+Description: PostgreSQL connection string from Vercel Postgres, Neon, or Supabase
+Apply to: Production, Preview, Development
+
+---
+
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+Value: AIza...your_api_key_here
+Description: Google Maps API key from Google Cloud Console
+Apply to: Production, Preview, Development
+
+---
+
+JWT_SECRET
+Value: (Generate using: openssl rand -base64 32)
+Description: Secret key for JWT authentication
+Apply to: Production, Preview, Development
+
+---
+
+NEXT_PUBLIC_API_URL
+Value: https://YOUR_PROJECT_NAME.vercel.app
+Description: Your production URL (update after first deploy)
+Apply to: Production
+
+========================================
+HOW TO ADD TO VERCEL:
+========================================
+
+1. Go to: https://vercel.com/dashboard
+2. Select your project
+3. Go to: Settings → Environment Variables
+4. For each variable above:
+   - Click "Add New"
+   - Enter Name (e.g., DATABASE_URL)
+   - Enter Value
+   - Select environments: Production, Preview, Development
+   - Click "Save"
+5. After adding all variables, go to Deployments
+6. Click "..." on latest deployment → "Redeploy"
+7. Check "Use existing Build Cache" → Redeploy
+
+========================================
+WHERE TO GET VALUES:
+========================================
+
+DATABASE_URL:
+- Vercel Postgres: Storage → Create Database → Auto-added
+- Neon: https://neon.tech → Create project → Connection string
+- Supabase: https://supabase.com → Settings → Database → URI
+
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
+- Go to: https://console.cloud.google.com/
+- Create project → Enable APIs:
+  * Maps JavaScript API
+  * Places API
+  * Geocoding API
+- Credentials → Create API Key
+
+JWT_SECRET:
+- Run in terminal: openssl rand -base64 32
+- Or use: https://generate-secret.vercel.app/32
+
+========================================
+VERIFY SETUP:
+========================================
+
+After adding all variables and redeploying:
+
+1. Check health endpoint:
+   curl https://your-app.vercel.app/api/health
+
+2. Should return:
+   {"status":"healthy","database":"connected","timestamp":"..."}
+
+3. If error, check Vercel logs:
+   Dashboard → Deployments → Click deployment → Functions tab
+
+========================================
