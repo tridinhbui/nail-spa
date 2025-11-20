@@ -92,48 +92,77 @@ const BLOCKED_DOMAINS = [
   "medium.com",
 ];
 
-// ULTRA STRICT: Content scoring weights
+// IMPROVED: Content scoring weights (more lenient)
 const SCORING = {
   POSITIVE_KEYWORDS: {
+    // Core business keywords
     services: 15,
     "service menu": 15,
     pricing: 15,
     "price list": 15,
     prices: 15,
     menu: 10,
+    "our services": 12,
+    
+    // Nail-specific keywords
     manicure: 10,
     pedicure: 10,
     "nail salon": 8,
     nail: 5,
+    nails: 5,
     gel: 5,
     acrylic: 5,
+    spa: 3,
+    
+    // Booking/contact keywords
     "book now": 15,
-    appointment: 15,
+    "book appointment": 15,
+    appointment: 12,
     booking: 10,
-    schedule: 5,
+    schedule: 8,
+    contact: 5,
+    "contact us": 8,
+    "call us": 5,
+    phone: 3,
+    
+    // Location/hours keywords
+    hours: 5,
+    location: 5,
+    address: 5,
+    "visit us": 8,
+    salon: 3,
   },
-  NEGATIVE_KEYWORDS: {
-    "directory": -50,
-    "listing": -50,
-    "find businesses": -50,
-    "popular businesses near": -50,
-    "business directory": -50,
-    "local directory": -50,
-    "review site": -50,
-    "reviews for": -50,
-    "read reviews": -30,
-    "write a review": -30,
-    "terms of service": -50,
-    "privacy policy": -30,
-    "redirecting to facebook": -50,
-    "follow us on facebook": -30,
-    "sponsored listing": -50,
-    "paid advertisement": -50,
+  PENALTY_KEYWORDS: {
+    // Strong penalties for directories
+    "directory": -30,
+    "listing": -30,
+    "find businesses": -40,
+    "popular businesses near": -40,
+    "business directory": -40,
+    "local directory": -40,
+    
+    // Review site penalties
+    "review site": -30,
+    "reviews for": -25,
+    "write a review": -20,
+    
+    // Aggregator penalties
+    "sponsored listing": -40,
+    "paid advertisement": -40,
+    
+    // Booking platform penalties (Yelp, Booksy, etc.)
+    "yelp": -50,
+    "facebook": -50,
+    "instagram": -50,
+    "booksy": -50,
+    "styleseat": -50,
+    "foursquare": -50,
+    "mapquest": -50,
   },
-  // STRICT: Real website requires score >= 20 (was 10)
-  REAL_THRESHOLD: 20,
-  // Minimum unique positive keywords required
-  MIN_KEYWORDS: 2,
+  // LOWERED: Real website requires score >= 8 (was 20)
+  REAL_THRESHOLD: 8,
+  // Minimum unique positive keywords required (more lenient)
+  MIN_KEYWORDS: 1,
 };
 
 /**
@@ -236,15 +265,17 @@ function scoreContent(html: string, url: string): {
 
   uniqueKeywordsFound = foundPositiveKeywords.length;
 
-  // Negative keywords (STRICT penalties)
+  // Penalty keywords (directory/review sites)
   for (const [keyword, points] of Object.entries(
-    SCORING.NEGATIVE_KEYWORDS
+    SCORING.PENALTY_KEYWORDS
   )) {
     if (htmlLower.includes(keyword)) {
       score += points; // points are negative (-50, -30)
-      console.log(`   ❌ Found "${keyword}" (${points})`);
+      console.log(`   ⚠️  Found penalty keyword "${keyword}" (${points})`);
     }
   }
+  
+  console.log(`   📊 Content Score: ${score} (threshold: ${SCORING.REAL_THRESHOLD}, keywords: ${uniqueKeywordsFound})`);
 
   return { score, uniqueKeywordsFound };
 }
@@ -293,11 +324,11 @@ export async function classifyWebsite(
   // Step 4: Score content (STRICT)
   const { score: contentScore, uniqueKeywordsFound } = scoreContent(html, url);
 
-  // Step 5: STRICT validation
-  // Must have at least 2 unique positive keywords AND score >= 20
+  // Step 5: IMPROVED validation (more lenient)
+  // Must have at least 1 unique positive keyword AND score >= 8
   if (uniqueKeywordsFound < SCORING.MIN_KEYWORDS) {
     console.log(
-      `   ❌ Invalid real-business website: Only ${uniqueKeywordsFound}/${SCORING.MIN_KEYWORDS} keywords found`
+      `   ❌ REJECTED: Only ${uniqueKeywordsFound}/${SCORING.MIN_KEYWORDS} business keywords found`
     );
     return {
       domain,
@@ -310,13 +341,20 @@ export async function classifyWebsite(
   // Check score threshold
   const isReal = contentScore >= SCORING.REAL_THRESHOLD;
 
+  // Detailed scoring breakdown in logs
   if (isReal) {
     console.log(
-      `   ✅ Real business website (score: ${contentScore}, keywords: ${uniqueKeywordsFound})`
+      `   ✅ ACCEPTED: Real business website`
+    );
+    console.log(
+      `      Score: ${contentScore} (>= ${SCORING.REAL_THRESHOLD}) | Keywords: ${uniqueKeywordsFound} | Domain: ${domain}`
     );
   } else {
     console.log(
-      `   ❌ Invalid real-business website: Score ${contentScore} < ${SCORING.REAL_THRESHOLD}`
+      `   ❌ REJECTED: Score too low`
+    );
+    console.log(
+      `      Score: ${contentScore} (< ${SCORING.REAL_THRESHOLD}) | Keywords: ${uniqueKeywordsFound} | Domain: ${domain}`
     );
   }
 

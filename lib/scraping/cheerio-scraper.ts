@@ -6,6 +6,25 @@
 import * as cheerio from "cheerio";
 import https from "https";
 import http from "http";
+import { retryWithExponentialBackoff } from "@/lib/utils/retry";
+
+// User-Agent rotation pool
+const USER_AGENTS = [
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
+];
+
+let userAgentIndex = 0;
+
+// Rotate user-agent
+function getNextUserAgent(): string {
+  const ua = USER_AGENTS[userAgentIndex];
+  userAgentIndex = (userAgentIndex + 1) % USER_AGENTS.length;
+  return ua;
+}
 
 export interface ScrapedService {
   name: string;
@@ -24,10 +43,31 @@ export interface ScrapeResult {
 }
 
 /**
- * Fetch HTML content with enhanced headers and redirect loop detection
+ * Fetch HTML with retry, exponential backoff, and user-agent rotation
  */
-async function fetchHTML(
+async function fetchHTMLWithRetry(
   url: string,
+  attemptNumber: number = 1
+): Promise<string> {
+  const userAgent = getNextUserAgent();
+  
+  console.log(`   🔄 Fetch attempt ${attemptNumber}/3 (UA: ${userAgent.substring(0, 50)}...)`);
+
+  return retryWithExponentialBackoff(
+    async () => {
+      return await fetchHTMLInternal(url, userAgent);
+    },
+    3, // 3 retries
+    300 // Start at 300ms, then 800ms, then 1500ms
+  );
+}
+
+/**
+ * Internal fetch function with redirect loop detection
+ */
+async function fetchHTMLInternal(
+  url: string,
+  userAgent: string,
   redirectCount: number = 0,
   visitedUrls: Set<string> = new Set()
 ): Promise<string> {
@@ -48,11 +88,11 @@ async function fetchHTML(
 
     const requestOptions = {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": userAgent,
         Accept:
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
         "Cache-Control": "no-cache",
         Pragma: "no-cache",
         "Sec-Ch-Ua":
@@ -64,6 +104,7 @@ async function fetchHTML(
         "Sec-Fetch-Site": "none",
         "Sec-Fetch-User": "?1",
         "Upgrade-Insecure-Requests": "1",
+        "Referer": "https://www.google.com/",
       },
       timeout: 10000, // 10s timeout
     };
@@ -78,7 +119,7 @@ async function fetchHTML(
       ) {
         const redirectUrl = new URL(res.headers.location, url).href;
         console.log(`   ↪️ Redirecting to: ${redirectUrl}`);
-        fetchHTML(redirectUrl, redirectCount + 1, visitedUrls)
+        fetchHTMLInternal(redirectUrl, userAgent, redirectCount + 1, visitedUrls)
           .then(resolve)
           .catch(reject);
         return;
@@ -97,7 +138,7 @@ async function fetchHTML(
     req.on("error", reject);
     req.on("timeout", () => {
       req.destroy();
-      reject(new Error("Request timeout"));
+      reject(new Error("Request timeout (10s)"));
     });
   });
 }
@@ -255,8 +296,8 @@ export async function scrapeWithCheerio(
   }
 
   try {
-    // Fetch HTML
-    const html = await fetchHTML(url);
+    // Fetch HTML with retry and user-agent rotation
+    const html = await fetchHTMLWithRetry(url);
     console.log(`   ✅ Fetched ${html.length} bytes`);
 
     // CRITICAL: Check if page is too small (JS-only or empty)

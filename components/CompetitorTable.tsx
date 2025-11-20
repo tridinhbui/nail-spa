@@ -45,7 +45,7 @@ export function CompetitorTable({ competitors }: CompetitorTableProps) {
           <CardTitle className="text-2xl font-bold">Competitor Analysis</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="max-h-[600px] overflow-y-auto overflow-x-auto">
             <Table>
               <TableHeader className="sticky top-0 bg-background">
                 <TableRow>

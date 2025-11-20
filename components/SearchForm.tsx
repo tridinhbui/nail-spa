@@ -16,7 +16,7 @@ interface SearchFormProps {
 export function SearchForm({ onAnalyze, isLoading = false }: SearchFormProps) {
   const [address, setAddress] = useState("");
   const [radius, setRadius] = useState(5);
-  const [competitorCount, setCompetitorCount] = useState(5);
+  const [competitorCount, setCompetitorCount] = useState(10); // Default to 10 competitors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -114,7 +114,7 @@ export function SearchForm({ onAnalyze, isLoading = false }: SearchFormProps) {
                 id="competitors"
                 type="number"
                 min="1"
-                max="20"
+                max="50"
                 value={competitorCount}
                 onChange={(e) => setCompetitorCount(Number(e.target.value))}
                 className={errors.competitorCount ? "border-red-500" : ""}

@@ -8,7 +8,7 @@ import { getUserFromToken } from "@/lib/auth";
 const searchSchema = z.object({
   address: z.string().min(5, "Address must be at least 5 characters"),
   radius: z.number().min(1).max(50),
-  competitorCount: z.number().min(1).max(20),
+  competitorCount: z.number().min(1).max(50), // Allow up to 50 competitors
   lat: z.number().optional(),
   lng: z.number().optional(),
 });
