@@ -13,10 +13,18 @@ Apply to: Production, Preview, Development
 
 ---
 
+GOOGLE_MAPS_API_KEY
+Value: AIza...your_api_key_here
+Description: Google Maps API key for backend (server-side)
+Apply to: Production, Preview, Development
+
+---
+
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
 Value: AIza...your_api_key_here
-Description: Google Maps API key from Google Cloud Console
+Description: Google Maps API key for frontend (client-side)
 Apply to: Production, Preview, Development
+Note: Use the SAME key as GOOGLE_MAPS_API_KEY
 
 ---
 

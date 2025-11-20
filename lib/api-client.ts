@@ -54,9 +54,37 @@ class ApiClient {
         headers,
       });
 
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        // Response is not JSON (probably HTML error page)
+        const text = await response.text();
+        console.error("Non-JSON response:", text.substring(0, 200));
+        return {
+          success: false,
+          error: {
+            message: `Server returned ${response.status}: ${response.statusText}`,
+            code: "INVALID_RESPONSE",
+          },
+        };
+      }
+
       const data = await response.json();
+      
+      // If response is not ok but we got JSON, it might be an error response
+      if (!response.ok && data.success !== false) {
+        return {
+          success: false,
+          error: {
+            message: data.message || `Request failed with status ${response.status}`,
+            code: data.code || "REQUEST_FAILED",
+          },
+        };
+      }
+      
       return data;
     } catch (error: any) {
+      console.error("API Client error:", error);
       return {
         success: false,
         error: {
