@@ -127,56 +127,57 @@ export async function POST(request: NextRequest) {
       
       const competitors = competitorsWithScore.slice(0, competitorCount);
 
-      // 🔍 STEP 2: VALIDATE WEBSITES (Detect social media / invalid URLs)
-      console.log(`\n🔍 Step 2: Validating websites...`);
-      const { validateWebsite } = await import("@/lib/scraping/website-validator");
+      // 🔍 STEP 2 & 3: INTELLIGENT WEBSITE DISCOVERY
+      console.log(`\n🔍 Step 2-3: Intelligent website discovery pipeline...`);
+      const { isBlacklistedDomain } = await import("@/lib/search/domainClassifier");
+      const { discoverWebsite } = await import("@/lib/search/websiteDiscovery");
       
-      const validationResults = new Map<string, any>();
-      competitors.forEach(comp => {
-        const validation = validateWebsite(comp.website);
-        validationResults.set(comp.name, validation);
-        
-        if (!validation.isValid) {
-          console.log(`⚠️  Invalid website for ${comp.name}: ${validation.reason} (${comp.website})`);
-        }
-      });
-
-      // 🔍 STEP 3: DISCOVER REAL WEBSITES (For invalid ones, use Brave Search)
-      console.log(`\n🔍 Step 3: Discovering real websites with Brave Search...`);
-      const { findRealWebsite } = await import("@/lib/scraping/brave-website-finder");
-      
+      // Check which competitors need discovery
       const needsDiscovery = competitors.filter(comp => {
-        const validation = validationResults.get(comp.name);
-        return !validation?.isValid;
+        if (!comp.website || comp.website === "#") return true;
+        if (isBlacklistedDomain(comp.website)) return true;
+        return false;
       });
       
-      console.log(`🎯 ${needsDiscovery.length} competitors need website discovery`);
+      console.log(`🎯 ${needsDiscovery.length}/${competitors.length} competitors need website discovery`);
       
+      // Discover websites sequentially with delays
       if (needsDiscovery.length > 0) {
-        for (const comp of needsDiscovery) {
-          const discovered = await findRealWebsite(comp.name, comp.address, comp.phone);
+        for (let i = 0; i < needsDiscovery.length; i++) {
+          const comp = needsDiscovery[i];
           
-          if (discovered.success && discovered.homepage) {
-            console.log(`✅ Found real website for ${comp.name}: ${discovered.homepage}`);
-            comp.website = discovered.homepage;
-            comp.discoveredWebsite = true;
-            comp.servicesPage = discovered.servicesPage;
-            comp.menuPage = discovered.menuPage;
-          } else {
-            console.log(`❌ Could not find website for ${comp.name}`);
+          console.log(`\n[${i + 1}/${needsDiscovery.length}] Discovering: ${comp.name}`);
+          
+          try {
+            const discovered = await discoverWebsite(comp.name, comp.address, comp.phone);
+            
+            if (discovered.success && discovered.homepage) {
+              console.log(`✅ Found: ${discovered.homepage} (confidence: ${discovered.confidence}, score: ${discovered.score})`);
+              comp.website = discovered.homepage;
+              comp.discoveredWebsite = true;
+              comp.websiteConfidence = discovered.confidence;
+              comp.websiteScore = discovered.score;
+              comp.servicesPage = discovered.servicesPage;
+              comp.menuPage = discovered.menuPage;
+            } else {
+              console.log(`❌ Not found: ${discovered.error || 'Unknown error'}`);
+              comp.discoveredWebsite = false;
+            }
+          } catch (error: any) {
+            console.error(`❌ Discovery error: ${error.message}`);
             comp.discoveredWebsite = false;
           }
         }
       }
 
-      // 🤖 STEP 4: WEB SCRAPING (Cheerio for static, fallback to estimation)
-      console.log(`\n🧠 Step 4: Starting web scraping for ${competitors.length} competitors...`);
+      // 🤖 STEP 4: SMART WEB SCRAPING (Only custom domains)
+      console.log(`\n🤖 Step 4: Smart scraping (filtering directories/social media)...`);
       let scrapedPricesMap = new Map();
       
       try {
-        const { batchScrapeWithCheerio } = await import("@/lib/scraping/cheerio-scraper");
+        const { batchSmartScrape } = await import("@/lib/scraping/scraper");
         
-        // Prioritize services/menu pages if discovered, otherwise use homepage
+        // Prepare scraping targets (prioritize services/menu pages)
         const scrapingTargets = competitors
           .filter(comp => comp.website && comp.website !== "#")
           .map(comp => ({
@@ -184,10 +185,10 @@ export async function POST(request: NextRequest) {
             website: comp.servicesPage || comp.menuPage || comp.website
           }));
         
-        console.log(`🎯 ${scrapingTargets.length} competitors have websites to scrape`);
+        console.log(`🎯 ${scrapingTargets.length} potential targets (will filter)...`);
         
         if (scrapingTargets.length > 0) {
-          scrapedPricesMap = await batchScrapeWithCheerio(scrapingTargets, 2);
+          scrapedPricesMap = await batchSmartScrape(scrapingTargets);
           console.log(`✅ Scraping completed: ${scrapedPricesMap.size} results`);
         } else {
           console.log(`⚠️  No websites to scrape`);
@@ -204,6 +205,7 @@ export async function POST(request: NextRequest) {
       
       // 📊 STEP 5: SMART FALLBACK & ESTIMATION
       console.log(`\n📊 Step 5: Applying prices (scraped or estimated)...`);
+      const { estimatePrices } = await import("@/lib/scraping/scraper");
       
       competitors.forEach(comp => {
         const scrapedData = scrapedPricesMap.get(comp.name);
@@ -212,24 +214,35 @@ export async function POST(request: NextRequest) {
         const priceLevelMap: Record<string, number> = { "$": 1, "$$": 2, "$$$": 3, "$$$$": 4 };
         const priceLevel = priceLevelMap[comp.priceRange] || 2;
         
-        // Price estimation based on tier ($, $$, $$$, $$$$)
-        const estimates = {
-          1: { gel: 30, pedicure: 35, acrylic: 45 },
-          2: { gel: 40, pedicure: 45, acrylic: 55 },
-          3: { gel: 50, pedicure: 60, acrylic: 70 },
-          4: { gel: 65, pedicure: 80, acrylic: 90 }
-        }[priceLevel] || { gel: 40, pedicure: 45, acrylic: 55 };
+        // Get estimates using centralized function
+        const estimates = estimatePrices(priceLevel);
 
-        // If scraped data exists, use it. Otherwise use estimates (marked as estimated)
-        const gelPrice = scrapedData?.gel || estimates.gel;
-        const pediPrice = scrapedData?.pedicure || estimates.pedicure;
-        const acrylicPrice = scrapedData?.acrylic || estimates.acrylic;
+        // Determine source
+        let source = 'Estimated (Tier)';
+        let gelPrice = estimates.gel;
+        let pediPrice = estimates.pedicure;
+        let acrylicPrice = estimates.acrylic;
 
-        const isEstimated = !scrapedData?.success;
+        if (scrapedData) {
+          if (scrapedData.source === 'scraped' && scrapedData.success) {
+            source = 'Scraped (Real)';
+            gelPrice = scrapedData.gel || estimates.gel;
+            pediPrice = scrapedData.pedicure || estimates.pedicure;
+            acrylicPrice = scrapedData.acrylic || estimates.acrylic;
+          } else if (scrapedData.source === 'skipped') {
+            source = `Estimated (${scrapedData.reason})`;
+          } else {
+            source = 'Estimated (Scraping failed)';
+          }
+        }
+
+        const websiteInfo = comp.discoveredWebsite 
+          ? `Discovered (${comp.websiteConfidence}, score: ${comp.websiteScore})`
+          : 'From Google Places';
 
         console.log(`🏷️ ${comp.name}:`, {
-          source: isEstimated ? 'Estimated (Tier)' : 'Scraped (Real)',
-          website: comp.discoveredWebsite ? 'Discovered via Brave' : 'From Google Places',
+          source,
+          website: websiteInfo,
           gel: gelPrice,
           pedi: pediPrice,
           acrylic: acrylicPrice
@@ -241,8 +254,9 @@ export async function POST(request: NextRequest) {
           acrylic: acrylicPrice,
         };
         
-        // Add metadata to help UI display "Estimated" label
-        comp.priceSource = isEstimated ? 'estimated' : 'scraped';
+        // Add metadata for UI
+        comp.priceSource = source.includes('Scraped') ? 'scraped' : 'estimated';
+        comp.priceConfidence = comp.websiteConfidence || 'low';
         
         if (scrapedData?.services && scrapedData.services.length > 0) {
           comp.scrapedServices = scrapedData.services.slice(0, 10);
