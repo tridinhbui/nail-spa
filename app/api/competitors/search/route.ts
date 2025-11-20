@@ -127,12 +127,12 @@ export async function POST(request: NextRequest) {
       
       const competitors = competitorsWithScore.slice(0, competitorCount);
 
-      // 🤖 SMART WEB SCRAPING: Multi-strategy approach
-      console.log(`🧠 Starting SMART web scraping for ${competitors.length} competitors...`);
+      // 🤖 LIGHTWEIGHT WEB SCRAPING: Using Cheerio (works on Vercel)
+      console.log(`🧠 Starting web scraping for ${competitors.length} competitors...`);
       let scrapedPricesMap = new Map();
       
       try {
-        const { batchSmartScrape } = await import("@/lib/scraping/smart-price-scraper");
+        const { batchScrapeWithCheerio } = await import("@/lib/scraping/cheerio-scraper");
         
         const scrapingTargets = competitors
           .filter(comp => comp.website && comp.website !== "#")
@@ -144,13 +144,13 @@ export async function POST(request: NextRequest) {
         console.log(`🎯 ${scrapingTargets.length} competitors have websites to scrape`);
         
         if (scrapingTargets.length > 0) {
-          scrapedPricesMap = await batchSmartScrape(scrapingTargets, 3);
-          console.log(`✅ SMART scraping completed: ${scrapedPricesMap.size} results`);
+          scrapedPricesMap = await batchScrapeWithCheerio(scrapingTargets, 2);
+          console.log(`✅ Scraping completed: ${scrapedPricesMap.size} results`);
         } else {
           console.log(`⚠️  No websites to scrape`);
         }
       } catch (scrapingError: any) {
-        console.error("❌ SMART scraping failed:", scrapingError);
+        console.error("❌ Scraping failed:", scrapingError);
         console.error("❌ Error details:", {
           message: scrapingError?.message,
           stack: scrapingError?.stack,
@@ -163,12 +163,20 @@ export async function POST(request: NextRequest) {
       competitors.forEach(comp => {
         const scrapedData = scrapedPricesMap.get(comp.name);
         if (scrapedData && scrapedData.success) {
-          console.log(`✅ Using scraped prices for ${comp.name}`);
+          console.log(`✅ Using scraped prices for ${comp.name}:`, {
+            gel: scrapedData.gel,
+            pedicure: scrapedData.pedicure,
+            acrylic: scrapedData.acrylic
+          });
           comp.samplePrices = {
             gel: scrapedData.gel || null,
             pedicure: scrapedData.pedicure || null,
             acrylic: scrapedData.acrylic || null,
           };
+          // Add all scraped services to metadata
+          if (scrapedData.services && scrapedData.services.length > 0) {
+            comp.scrapedServices = scrapedData.services.slice(0, 10);
+          }
         } else {
           // NO FAKE PRICES - Leave blank if we can't find real ones
           console.log(`⚠️  No real prices found for ${comp.name}, leaving blank`);
