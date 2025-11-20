@@ -49,10 +49,10 @@ export function SearchForm({ onAnalyze, isLoading = false }: SearchFormProps) {
   };
 
   return (
-    <Card className="w-full rounded-2xl shadow-lg">
+    <Card className="w-full rounded-xl shadow-lg border border-gray-200 bg-white">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold">Search Competitors</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-2xl font-bold text-black">Search Competitors</CardTitle>
+        <CardDescription className="text-gray-600">
           Enter your salon location to find and analyze nearby competitors
         </CardDescription>
       </CardHeader>
@@ -133,7 +133,7 @@ export function SearchForm({ onAnalyze, isLoading = false }: SearchFormProps) {
 
           <Button 
             type="submit" 
-            className="w-full md:w-auto" 
+            className="w-full md:w-auto bg-black hover:bg-gray-800 text-white" 
             size="lg"
             disabled={isLoading}
             aria-label="Analyze competitors"

@@ -137,15 +137,15 @@ export default function AnalyzePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="border-b bg-white/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-gray-200 bg-white sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <Link href="/" className="flex items-center gap-2 text-gray-700 hover:text-black transition-colors">
             <ArrowLeft className="h-5 w-5" />
             <span className="font-semibold">Back to Home</span>
           </Link>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold text-black">
             Competitor Analysis
           </h1>
           <div className="w-[120px]"></div> {/* Spacer for centering */}
@@ -181,13 +181,13 @@ export default function AnalyzePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <Card className="border-red-200 bg-red-50 rounded-2xl shadow-lg">
+            <Card className="border-red-300 bg-white rounded-xl shadow-lg">
               <CardContent className="pt-6">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
                   <div>
-                    <h3 className="font-semibold text-red-900 mb-1">Analysis Error</h3>
-                    <p className="text-red-700 text-sm">{error}</p>
+                    <h3 className="font-semibold text-gray-900 mb-1">Analysis Error</h3>
+                    <p className="text-gray-700 text-sm">{error}</p>
                   </div>
                 </div>
               </CardContent>
@@ -252,14 +252,14 @@ export default function AnalyzePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
           >
-            <Card className="rounded-2xl shadow-lg">
+            <Card className="rounded-xl shadow-lg border border-gray-200">
               <CardContent className="pt-12 pb-12 text-center">
                 <div className="space-y-3">
                   <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
-                    <AlertCircle className="h-8 w-8 text-gray-400" />
+                    <AlertCircle className="h-8 w-8 text-gray-600" />
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900">No Competitors Found</h3>
-                  <p className="text-gray-500">
+                  <h3 className="text-xl font-semibold text-black">No Competitors Found</h3>
+                  <p className="text-gray-600">
                     No nail salons were found in the specified area. Try expanding your search radius.
                   </p>
                 </div>
@@ -275,13 +275,13 @@ export default function AnalyzePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
           >
-            <Card className="rounded-2xl shadow-lg bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
+            <Card className="rounded-xl shadow-lg bg-white border border-gray-200">
               <CardContent className="pt-12 pb-12 text-center">
                 <div className="space-y-3">
-                  <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto">
+                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto">
                     <span className="text-3xl">🔍</span>
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900">Ready to Analyze</h3>
+                  <h3 className="text-xl font-semibold text-black">Ready to Analyze</h3>
                   <p className="text-gray-600 max-w-md mx-auto">
                     Enter your salon's address above to discover and analyze nearby competitors. 
                     We'll provide detailed insights on pricing, ratings, and more.
