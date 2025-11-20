@@ -1,4 +1,23 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+// Determine API base URL
+// - If NEXT_PUBLIC_API_URL is set to full URL (like http://localhost:3000), add /api
+// - Otherwise use relative path /api
+const getApiBase = () => {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  if (!configuredUrl) {
+    return "/api";
+  }
+  
+  // If it's a full URL (starts with http), append /api
+  if (configuredUrl.startsWith("http")) {
+    return `${configuredUrl}/api`;
+  }
+  
+  // Otherwise assume it's already the API path
+  return configuredUrl;
+};
+
+const API_BASE = getApiBase();
 
 export interface ApiResponse<T = any> {
   success: boolean;
