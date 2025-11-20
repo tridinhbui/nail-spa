@@ -141,9 +141,9 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // 🔍 STEP 3: DISCOVER REAL WEBSITES (For invalid ones, use Bing Search)
-      console.log(`\n🔍 Step 3: Discovering real websites with Bing Search...`);
-      const { findRealWebsite } = await import("@/lib/scraping/bing-website-finder");
+      // 🔍 STEP 3: DISCOVER REAL WEBSITES (For invalid ones, use Brave Search)
+      console.log(`\n🔍 Step 3: Discovering real websites with Brave Search...`);
+      const { findRealWebsite } = await import("@/lib/scraping/brave-website-finder");
       
       const needsDiscovery = competitors.filter(comp => {
         const validation = validationResults.get(comp.name);
@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
 
         console.log(`🏷️ ${comp.name}:`, {
           source: isEstimated ? 'Estimated (Tier)' : 'Scraped (Real)',
-          website: comp.discoveredWebsite ? 'Discovered via Bing' : 'From Google Places',
+          website: comp.discoveredWebsite ? 'Discovered via Brave' : 'From Google Places',
           gel: gelPrice,
           pedi: pediPrice,
           acrylic: acrylicPrice

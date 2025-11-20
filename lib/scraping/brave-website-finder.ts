@@ -1,18 +1,17 @@
 /**
- * 🔍 Bing Web Search API Integration
+ * 🔍 Brave Web Search API Integration
  * Finds real business websites when Google Places only returns social media
  */
 
-interface BingSearchResult {
-  name: string;
+interface BraveSearchResult {
+  title: string;
   url: string;
-  snippet: string;
-  displayUrl: string;
+  description: string;
 }
 
-interface BingApiResponse {
-  webPages?: {
-    value: BingSearchResult[];
+interface BraveApiResponse {
+  web?: {
+    results: BraveSearchResult[];
   };
 }
 
@@ -26,7 +25,7 @@ export interface DiscoveredWebsite {
 }
 
 /**
- * Search for a business's real website using Bing Search API
+ * Search for a business's real website using Brave Search API
  * @param name Business name
  * @param address Business address
  * @param phone Optional phone for better accuracy
@@ -36,14 +35,14 @@ export async function findRealWebsite(
   address: string,
   phone?: string
 ): Promise<DiscoveredWebsite> {
-  const apiKey = process.env.BING_SEARCH_API_KEY;
+  const apiKey = process.env.BRAVE_SEARCH_API_KEY;
 
   if (!apiKey) {
-    console.warn("⚠️  Bing Search API key not configured");
+    console.warn("⚠️  Brave Search API key not configured");
     return {
       searchQuery: "",
       success: false,
-      error: "BING_API_KEY_MISSING",
+      error: "BRAVE_API_KEY_MISSING",
     };
   }
 
@@ -51,29 +50,31 @@ export async function findRealWebsite(
   const searchQuery = `${name} ${address} nail salon website`;
 
   try {
-    console.log(`🔍 Bing Search: "${searchQuery}"`);
+    console.log(`🔍 Brave Search: "${searchQuery}"`);
 
     const response = await fetch(
-      `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(searchQuery)}&count=10&mkt=en-US`,
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=10`,
       {
         headers: {
-          "Ocp-Apim-Subscription-Key": apiKey,
+          "Accept": "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": apiKey,
         },
       }
     );
 
     if (!response.ok) {
-      console.error(`❌ Bing API error: ${response.status} ${response.statusText}`);
+      console.error(`❌ Brave API error: ${response.status} ${response.statusText}`);
       return {
         searchQuery,
         success: false,
-        error: `BING_API_ERROR_${response.status}`,
+        error: `BRAVE_API_ERROR_${response.status}`,
       };
     }
 
-    const data: BingApiResponse = await response.json();
+    const data: BraveApiResponse = await response.json();
 
-    if (!data.webPages || data.webPages.value.length === 0) {
+    if (!data.web || data.web.results.length === 0) {
       console.log(`⚠️  No results found for: ${name}`);
       return {
         searchQuery,
@@ -83,7 +84,7 @@ export async function findRealWebsite(
     }
 
     // Filter out social media and aggregators from results
-    const validResults = data.webPages.value.filter((result) => {
+    const validResults = data.web.results.filter((result) => {
       const url = result.url.toLowerCase();
       return (
         !url.includes("facebook.com") &&
@@ -132,7 +133,7 @@ export async function findRealWebsite(
       success: true,
     };
   } catch (error: any) {
-    console.error(`❌ Bing search error for ${name}:`, error.message);
+    console.error(`❌ Brave search error for ${name}:`, error.message);
     return {
       searchQuery,
       success: false,
@@ -145,15 +146,15 @@ export async function findRealWebsite(
  * Find a page URL that matches certain keywords
  */
 function findPageByKeywords(
-  results: BingSearchResult[],
+  results: BraveSearchResult[],
   keywords: string[]
 ): string | null {
   for (const result of results) {
     const urlLower = result.url.toLowerCase();
-    const snippetLower = result.snippet.toLowerCase();
+    const descriptionLower = result.description.toLowerCase();
 
     for (const keyword of keywords) {
-      if (urlLower.includes(keyword) || snippetLower.includes(keyword)) {
+      if (urlLower.includes(keyword) || descriptionLower.includes(keyword)) {
         return result.url;
       }
     }
@@ -187,7 +188,7 @@ export async function batchFindWebsites(
       results.set(comp.name, batchResults[index]);
     });
 
-    // Small delay between batches to be nice to Bing API
+    // Small delay between batches to be nice to Brave API
     if (i + concurrency < competitors.length) {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }

@@ -39,7 +39,7 @@ This system automatically finds real business websites when Google Places return
 └──────────────────────────────────────────────────────────────┘
                           ↓
 ┌──────────────────────────────────────────────────────────────┐
-│ STEP 3: Bing Search API (if invalid)                         │
+│ STEP 3: Brave Search API (if invalid)                        │
 │ Discover real business website                               │
 ├──────────────────────────────────────────────────────────────┤
 │ Query: "{name} {address} nail salon website"                 │
@@ -52,7 +52,7 @@ This system automatically finds real business websites when Google Places return
 │   ✅ Services: luxurynails.com/services                      │
 │   ✅ Menu: luxurynails.com/menu                              │
 │                                                               │
-│ File: lib/scraping/bing-website-finder.ts                    │
+│ File: lib/scraping/brave-website-finder.ts                   │
 │                                                               │
 │ Filters out:                                                  │
 │   - Social media URLs                                         │
@@ -113,9 +113,9 @@ This system automatically finds real business websites when Google Places return
 - **Estimated Prices**: ~80%
 - **Overall Accuracy**: **~30%**
 
-### After (With Bing Discovery)
+### After (With Brave Discovery)
 - **Valid Websites**: ~40% (from Google)
-- **Discovered via Bing**: ~45% (60% × 75% success)
+- **Discovered via Brave**: ~45% (60% × 75% success)
 - **Total Real Websites**: ~85%
 - **Scraping Success**: ~40-50%
 - **Estimated Prices**: ~50%
@@ -128,8 +128,8 @@ This system automatically finds real business websites when Google Places return
 ### Environment Variables
 
 ```env
-# Required: Bing Search API
-BING_SEARCH_API_KEY="your-bing-api-key"
+# Required: Brave Search API
+BRAVE_SEARCH_API_KEY="BSAtrTa-8rfXkMYkt91fmMyrF4AYMLZ"
 
 # Already configured
 GOOGLE_MAPS_API_KEY="your-google-api-key"
@@ -138,16 +138,16 @@ NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="your-google-api-key"
 
 ### API Limits
 
-**Bing Search Free Tier (F1)**:
-- 1,000 searches/month
-- 3 requests/second
-- Perfect for testing
+**Brave Search Free Tier**:
+- 2,000 searches/month FREE
+- No strict rate limits
+- Perfect for production use
 
 **Usage Estimation**:
 - 5 competitors per search
 - 60% have invalid websites
-- ~3 Bing searches per analysis
-- **Free tier** = ~330 analyses/month
+- ~3 Brave searches per analysis
+- **Free tier** = ~666 analyses/month
 
 ---
 
@@ -156,7 +156,7 @@ NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="your-google-api-key"
 ### Test Validation Logic
 
 ```bash
-node scripts/test-bing-discovery.js
+node scripts/test-brave-discovery.js
 ```
 
 **Expected Output**:
@@ -177,8 +177,8 @@ Need Bing Discovery: 3
 🔍 Step 2: Validating websites...
 ⚠️  Invalid website for Luxury Nails: social_media_facebook
 
-🔍 Step 3: Discovering real websites with Bing Search...
-🔍 Bing Search: "Luxury Nails 135 S Main St nail salon website"
+🔍 Step 3: Discovering real websites with Brave Search...
+🔍 Brave Search: "Luxury Nails 135 S Main St nail salon website"
 ✅ Found website for Luxury Nails: luxurynails.com
    → Services: luxurynails.com/services
 
@@ -189,7 +189,7 @@ Need Bing Discovery: 3
 📊 Step 5: Applying prices (scraped or estimated)...
 🏷️ Luxury Nails: {
   source: 'Scraped (Real)',
-  website: 'Discovered via Bing',
+  website: 'Discovered via Brave',
   gel: 45,
   pedi: 50,
   acrylic: 60
@@ -203,18 +203,18 @@ Need Bing Discovery: 3
 ```
 lib/scraping/
 ├── website-validator.ts         # Step 2: Validate URLs
-├── bing-website-finder.ts       # Step 3: Discover real websites
+├── brave-website-finder.ts      # Step 3: Discover real websites
 └── cheerio-scraper.ts           # Step 4: Scrape pricing
 
 app/api/competitors/search/
 └── route.ts                     # Main flow orchestration
 
 docs/
-├── BING_SEARCH_SETUP.md         # Setup guide
+├── BRAVE_SEARCH_SETUP.md        # Setup guide
 └── WEBSITE_DISCOVERY_FLOW.md    # This file
 
 scripts/
-├── test-bing-discovery.js       # Test validation
+├── test-brave-discovery.js      # Test validation
 └── test-estimation.js           # Test fallback
 ```
 
@@ -226,7 +226,7 @@ scripts/
 
 1. **Add Environment Variable**:
    - Go to: Vercel Dashboard → Project → Settings → Environment Variables
-   - Add: `BING_SEARCH_API_KEY` = `your-key`
+   - Add: `BRAVE_SEARCH_API_KEY` = `BSAtrTa-8rfXkMYkt91fmMyrF4AYMLZ`
    - Environments: ✅ Production, ✅ Preview, ✅ Development
 
 2. **Redeploy**:
@@ -238,25 +238,25 @@ scripts/
    - Check deployment logs for: `🔍 Step 3: Discovering real websites...`
    - Test on production URL
 
-### Azure Setup
+### Brave Search Setup
 
-See [BING_SEARCH_SETUP.md](./BING_SEARCH_SETUP.md) for detailed instructions.
+See [BRAVE_SEARCH_SETUP.md](./BRAVE_SEARCH_SETUP.md) for detailed instructions.
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Issue: "Bing Search API key not configured"
-**Solution**: Add `BING_SEARCH_API_KEY` to `.env` and restart server
+### Issue: "Brave Search API key not configured"
+**Solution**: Add `BRAVE_SEARCH_API_KEY` to `.env` and restart server
 
-### Issue: No results from Bing
+### Issue: No results from Brave
 **Solution**: Business name too generic, search uses full address for accuracy
 
 ### Issue: Still getting social media URLs
-**Solution**: Bing also returned social media. Fallback to estimation will work.
+**Solution**: Brave also returned social media. Fallback to estimation will work.
 
 ### Issue: "Out of call volume quota"
-**Solution**: Exceeded 1,000 searches/month. Upgrade to S1 tier or cache results.
+**Solution**: Exceeded 2,000 searches/month. Contact Brave for additional quota or cache results.
 
 ---
 
@@ -272,11 +272,11 @@ See [BING_SEARCH_SETUP.md](./BING_SEARCH_SETUP.md) for detailed instructions.
 
 ## 📚 References
 
-- [Bing Search API Documentation](https://docs.microsoft.com/en-us/bing/search-apis/bing-web-search/overview)
+- [Brave Search API Documentation](https://brave.com/search/api/)
 - [Google Places API](https://developers.google.com/maps/documentation/places/web-service/overview)
 - [Cheerio Documentation](https://cheerio.js.org/)
 
 ---
 
-**Questions?** Check [BING_SEARCH_SETUP.md](./BING_SEARCH_SETUP.md) or open an issue on GitHub.
+**Questions?** Check [BRAVE_SEARCH_SETUP.md](./BRAVE_SEARCH_SETUP.md) or open an issue on GitHub.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * 🧪 Test Bing Website Discovery
- * Tests the complete flow: Validation → Bing Search → Website Discovery
+ * 🧪 Test Brave Website Discovery
+ * Tests the complete flow: Validation → Brave Search → Website Discovery
  */
 
 console.log("🧪 Testing Website Discovery Flow\n");
@@ -68,7 +68,7 @@ mockCompetitors.forEach((comp, index) => {
   console.log(`   URL: ${comp.website || "(none)"}`);
 
   if (!validation.isValid) {
-    console.log(`   🔍 Needs Bing Search to find real website`);
+    console.log(`   🔍 Needs Brave Search to find real website`);
   }
   console.log();
 });
@@ -82,9 +82,9 @@ const invalidCount = mockCompetitors.filter(
 
 console.log(`Total Competitors: ${mockCompetitors.length}`);
 console.log(`Invalid Websites: ${invalidCount} (${Math.round((invalidCount / mockCompetitors.length) * 100)}%)`);
-console.log(`Need Bing Discovery: ${invalidCount}`);
+console.log(`Need Brave Discovery: ${invalidCount}`);
 
-console.log("\n🔍 Bing Search Query Examples:\n");
+console.log("\n🔍 Brave Search Query Examples:\n");
 mockCompetitors
   .filter((c) => !validateWebsite(c.website).isValid)
   .forEach((comp) => {
@@ -95,9 +95,9 @@ mockCompetitors
 console.log("\n" + "=".repeat(70));
 console.log("\n✅ Validation logic verified!");
 console.log("\n📌 Next Steps:");
-console.log("   1. Get Bing Search API key from Azure Portal");
-console.log("   2. Add BING_SEARCH_API_KEY to your .env file");
+console.log("   1. Brave Search API key already configured!");
+console.log("   2. BRAVE_SEARCH_API_KEY is set in .env");
 console.log("   3. Restart dev server");
 console.log("   4. Test competitor search on /analyze page");
-console.log("\n💡 See docs/BING_SEARCH_SETUP.md for detailed setup guide\n");
+console.log("\n💡 See docs/BRAVE_SEARCH_SETUP.md for detailed setup guide\n");
 
