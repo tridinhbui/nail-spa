@@ -122,3 +122,22 @@ export async function retryWithRateLimit<T>(
   });
 }
 
+/**
+ * Retry with exponential backoff (simple wrapper)
+ * @param fn Function to retry
+ * @param maxAttempts Max retry attempts (default: 3)
+ * @param baseDelay Base delay in ms (default: 300)
+ */
+export async function retryWithExponentialBackoff<T>(
+  fn: () => Promise<T>,
+  maxAttempts: number = 3,
+  baseDelay: number = 300
+): Promise<T> {
+  return retry(fn, {
+    maxAttempts,
+    baseDelay,
+    maxDelay: 10000, // Max 10 seconds
+    shouldRetry: isRetryableError,
+  });
+}
+
