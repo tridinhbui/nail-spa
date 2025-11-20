@@ -2,7 +2,7 @@
  * Verify scraping and estimation logic
  */
 
-import { scrapeWithCheerio } from "../lib/scraping/cheerio-scraper";
+import { scrapeWithCheerio } from "../lib/scraping/cheerio-scraper.js";
 
 async function test() {
   console.log("🧪 Verification Test\n");
