@@ -159,32 +159,44 @@ export async function POST(request: NextRequest) {
         // Continue without prices
       }
       
-      // Merge scraped prices into competitors
+      // 📊 SMART ESTIMATION & MERGING
       competitors.forEach(comp => {
         const scrapedData = scrapedPricesMap.get(comp.name);
-        if (scrapedData && scrapedData.success) {
-          console.log(`✅ Using scraped prices for ${comp.name}:`, {
-            gel: scrapedData.gel,
-            pedicure: scrapedData.pedicure,
-            acrylic: scrapedData.acrylic
-          });
-          comp.samplePrices = {
-            gel: scrapedData.gel || null,
-            pedicure: scrapedData.pedicure || null,
-            acrylic: scrapedData.acrylic || null,
-          };
-          // Add all scraped services to metadata
-          if (scrapedData.services && scrapedData.services.length > 0) {
-            comp.scrapedServices = scrapedData.services.slice(0, 10);
-          }
-        } else {
-          // NO FAKE PRICES - Leave blank if we can't find real ones
-          console.log(`⚠️  No real prices found for ${comp.name}, leaving blank`);
-          comp.samplePrices = {
-            gel: null,
-            pedicure: null,
-            acrylic: null,
-          };
+        const priceLevel = comp.priceLevel || 2; // Default to $$
+        
+        // Price estimation based on tier ($, $$, $$$, $$$$)
+        const estimates = {
+          1: { gel: 30, pedicure: 35, acrylic: 45 },
+          2: { gel: 40, pedicure: 45, acrylic: 55 },
+          3: { gel: 50, pedicure: 60, acrylic: 70 },
+          4: { gel: 65, pedicure: 80, acrylic: 90 }
+        }[priceLevel] || { gel: 40, pedicure: 45, acrylic: 55 };
+
+        // If scraped data exists, use it. Otherwise use estimates (marked as estimated)
+        const gelPrice = scrapedData?.gel || estimates.gel;
+        const pediPrice = scrapedData?.pedicure || estimates.pedicure;
+        const acrylicPrice = scrapedData?.acrylic || estimates.acrylic;
+
+        const isEstimated = !scrapedData?.success;
+
+        console.log(`🏷️ Pricing for ${comp.name}:`, {
+          source: isEstimated ? 'Estimated (Tier based)' : 'Scraped (Real website)',
+          gel: gelPrice,
+          pedi: pediPrice,
+          acrylic: acrylicPrice
+        });
+
+        comp.samplePrices = {
+          gel: gelPrice,
+          pedicure: pediPrice,
+          acrylic: acrylicPrice,
+        };
+        
+        // Add metadata to help UI display "Estimated" label
+        comp.priceSource = isEstimated ? 'estimated' : 'scraped';
+        
+        if (scrapedData?.services && scrapedData.services.length > 0) {
+          comp.scrapedServices = scrapedData.services.slice(0, 10);
         }
       });
 

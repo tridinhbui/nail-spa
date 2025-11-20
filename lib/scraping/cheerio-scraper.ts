@@ -24,19 +24,40 @@ export interface ScrapeResult {
 }
 
 /**
- * Fetch HTML content
+ * Fetch HTML content with enhanced headers
  */
 async function fetchHTML(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith("https") ? https : http;
     
-    protocol.get(url, {
+    const requestOptions = {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"macOS"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1'
+      },
+      timeout: 10000 // 10s timeout
+    };
+
+    const req = protocol.get(url, requestOptions, (res) => {
+      // Handle redirects
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        const redirectUrl = new URL(res.headers.location, url).href;
+        console.log(`   ↪️ Redirecting to: ${redirectUrl}`);
+        fetchHTML(redirectUrl).then(resolve).catch(reject);
+        return;
       }
-    }, (res) => {
+
       if (res.statusCode !== 200) {
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
@@ -45,28 +66,39 @@ async function fetchHTML(url: string): Promise<string> {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(data));
-    }).on('error', reject);
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
   });
 }
 
 /**
- * Extract prices from text
+ * Extract prices from text with improved regex
  */
 function extractPrices(text: string): number[] {
   const prices: number[] = [];
   
-  // Match patterns like $25, $25.00, 25$, etc.
+  // Enhanced regex for various price formats
+  // Matches: $25, $25.00, 25$, $ 25, 25 USD, etc.
   const patterns = [
-    /\$\s*(\d+(?:\.\d{2})?)/g,
-    /(\d+(?:\.\d{2})?)\s*\$/g,
-    /USD\s*(\d+(?:\.\d{2})?)/gi,
+    /\$\s*(\d+(?:\.\d{2})?)/g,           // $25, $ 25
+    /(\d+(?:\.\d{2})?)\s*\$/g,           // 25$
+    /(?:USD|Price|Cost)[:\s]*(\d+(?:\.\d{2})?)/gi, // USD 25, Price: 25
+    /starting\s+at\s*\$?\s*(\d+)/gi,     // starting at $25
+    /from\s*\$?\s*(\d+)/gi               // from $25
   ];
 
   patterns.forEach(pattern => {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
       const price = parseFloat(match[1]);
-      if (price >= 10 && price <= 500) { // Reasonable nail service range
+      // Filter unreasonable prices (too low or too high for nails)
+      // Avoid capturing years (2023) or phone numbers
+      if (price >= 15 && price <= 200) { 
         prices.push(price);
       }
     }
@@ -81,16 +113,17 @@ function extractPrices(text: string): number[] {
 function categorizeService(name: string): string | null {
   const lower = name.toLowerCase();
   
-  if (lower.includes('gel') && (lower.includes('mani') || lower.includes('manicure'))) {
+  if ((lower.includes('gel') || lower.includes('shellac') || lower.includes('no-chip')) && 
+      (lower.includes('mani') || lower.includes('polish') || lower.includes('color'))) {
     return 'gel';
   }
-  if (lower.includes('pedicure') || lower.includes('pedi')) {
+  if (lower.includes('pedicure') || lower.includes('pedi') || lower.includes('spa') && lower.includes('feet')) {
     return 'pedicure';
   }
-  if (lower.includes('acrylic') || lower.includes('full set')) {
+  if (lower.includes('acrylic') || lower.includes('full set') || lower.includes('fill') || lower.includes('artificial')) {
     return 'acrylic';
   }
-  if (lower.includes('dip') || lower.includes('powder')) {
+  if (lower.includes('dip') || lower.includes('powder') || lower.includes('sns')) {
     return 'dip';
   }
   
@@ -104,70 +137,56 @@ function parseServices(html: string): ScrapedService[] {
   const $ = cheerio.load(html);
   const services: ScrapedService[] = [];
   
-  // Strategy 1: Look for table rows
-  $('table tr, .service-item, .price-item, .menu-item').each((_, elem) => {
-    const $elem = $(elem);
-    const text = $elem.text();
+  // Remove scripts, styles, and navigation to reduce noise
+  $('script, style, nav, footer, header, meta, link').remove();
+
+  // Strategy 1: Look for table rows (common in price lists)
+  $('tr').each((_, elem) => {
+    const $row = $(elem);
+    const text = $row.text().replace(/\s+/g, ' ').trim();
     
     const prices = extractPrices(text);
     if (prices.length > 0) {
-      const serviceName = text
-        .replace(/\$\d+/g, '')
-        .replace(/\d+\$/g, '')
-        .trim()
-        .slice(0, 100);
-      
-      if (serviceName.length > 3) {
-        services.push({
-          name: serviceName,
-          price: prices[0],
-        });
+      // Try to get name from first cell
+      const name = $row.find('td, th').first().text().trim();
+      if (name && name.length > 3 && name.length < 100 && !/\d/.test(name)) {
+        services.push({ name, price: prices[0] });
       }
     }
   });
 
-  // Strategy 2: Look for price lists
-  $('ul li, ol li, div.service, div.price').each((_, elem) => {
-    const $elem = $(elem);
-    const text = $elem.text();
-    
+  // Strategy 2: Look for list items
+  $('li').each((_, elem) => {
+    const text = $(elem).text().replace(/\s+/g, ' ').trim();
     const prices = extractPrices(text);
     if (prices.length > 0) {
-      const serviceName = text
-        .replace(/\$\d+/g, '')
-        .replace(/\d+\$/g, '')
-        .trim()
-        .slice(0, 100);
-      
-      if (serviceName.length > 3 && !services.some(s => s.name === serviceName)) {
-        services.push({
-          name: serviceName,
-          price: prices[0],
-        });
+      const name = text.replace(/[\$\d.,]+.*/, '').trim(); // Remove price part
+      if (name.length > 3 && name.length < 100) {
+        services.push({ name, price: prices[0] });
       }
     }
   });
 
-  // Strategy 3: Look for any element with price-related classes
-  $('.price, .cost, .pricing, [class*="price"], [class*="cost"]').each((_, elem) => {
-    const $elem = $(elem);
-    const text = $elem.text();
+  // Strategy 3: Look for div/p with price patterns
+  $('div, p, span').each((_, elem) => {
+    // Only check leaf nodes or nodes with minimal children
+    if ($(elem).children().length > 2) return;
+
+    const text = $(elem).text().replace(/\s+/g, ' ').trim();
     const prices = extractPrices(text);
     
     if (prices.length > 0) {
-      // Try to find service name in parent or sibling
-      const $parent = $elem.parent();
-      const serviceName = $parent.text()
-        .replace(text, '')
-        .replace(/\$\d+/g, '')
-        .trim()
-        .slice(0, 100);
+      // Try to find name in the same element or previous sibling
+      let name = text.replace(/[\$\d.,]+.*/, '').trim();
       
-      if (serviceName.length > 3 && !services.some(s => s.name === serviceName)) {
-        services.push({
-          name: serviceName,
-          price: prices[0],
-        });
+      if (name.length < 3) {
+        // Check previous element
+        const prev = $(elem).prev().text().trim();
+        if (prev.length > 3 && prev.length < 100) name = prev;
+      }
+
+      if (name.length > 3 && name.length < 100) {
+        services.push({ name, price: prices[0] });
       }
     }
   });
@@ -192,6 +211,11 @@ export async function scrapeWithCheerio(
     confidence: 0,
   };
 
+  if (!url || url === '#' || url.includes('google.com')) {
+    console.log(`   ⚠️ Invalid URL: ${url}`);
+    return result;
+  }
+
   try {
     // Fetch HTML
     const html = await fetchHTML(url);
@@ -209,18 +233,28 @@ export async function scrapeWithCheerio(
     result.services = services;
     result.success = true;
 
-    // Categorize services
+    // Categorize services and find median prices
+    const gelPrices: number[] = [];
+    const pediPrices: number[] = [];
+    const acrylicPrices: number[] = [];
+
     services.forEach(service => {
       const category = categorizeService(service.name);
-      
-      if (category === 'gel' && !result.gel) {
-        result.gel = service.price;
-      } else if (category === 'pedicure' && !result.pedicure) {
-        result.pedicure = service.price;
-      } else if (category === 'acrylic' && !result.acrylic) {
-        result.acrylic = service.price;
-      }
+      if (category === 'gel') gelPrices.push(service.price);
+      if (category === 'pedicure') pediPrices.push(service.price);
+      if (category === 'acrylic') acrylicPrices.push(service.price);
     });
+
+    // Helper to get median
+    const getMedian = (arr: number[]) => {
+      if (arr.length === 0) return undefined;
+      const sorted = arr.sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+
+    result.gel = getMedian(gelPrices);
+    result.pedicure = getMedian(pediPrices);
+    result.acrylic = getMedian(acrylicPrices);
 
     // Calculate confidence
     const hasGel = !!result.gel;
@@ -281,4 +315,3 @@ export async function batchScrapeWithCheerio(
 
   return results;
 }
-
