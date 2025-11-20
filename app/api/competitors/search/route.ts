@@ -177,12 +177,13 @@ export async function POST(request: NextRequest) {
       try {
         const { batchSmartScrape } = await import("@/lib/scraping/scraper");
         
-        // Prepare scraping targets (prioritize services/menu pages)
+        // Prepare scraping targets (prioritize services/menu pages, include score for validation)
         const scrapingTargets = competitors
           .filter(comp => comp.website && comp.website !== "#")
           .map(comp => ({
             name: comp.name,
-            website: comp.servicesPage || comp.menuPage || comp.website
+            website: comp.servicesPage || comp.menuPage || comp.website,
+            websiteScore: comp.websiteScore || 0
           }));
         
         console.log(`🎯 ${scrapingTargets.length} potential targets (will filter)...`);

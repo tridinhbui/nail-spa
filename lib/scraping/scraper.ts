@@ -17,9 +17,9 @@ export interface ScraperResult {
 }
 
 /**
- * Smart scrape decision: Only scrape custom domains
+ * Smart scrape decision: ULTRA STRICT - Only scrape validated real business websites
  */
-export function shouldScrape(url: string): {
+export function shouldScrape(url: string, websiteScore?: number): {
   shouldScrape: boolean;
   reason: string;
 } {
@@ -30,28 +30,40 @@ export function shouldScrape(url: string): {
     };
   }
 
+  // HARD BLOCK: Check blocked domains
   if (isBlacklistedDomain(url)) {
+    console.log(`   ⚠️  Blocked directory domain - skipping scrape`);
     return {
       shouldScrape: false,
-      reason: "Blacklisted domain (directory/social media)",
+      reason: "Blocked domain (directory/social media/review site)",
+    };
+  }
+
+  // STRICT: Only scrape if website was validated with score >= 20
+  if (websiteScore !== undefined && websiteScore < 20) {
+    console.log(`   ❌ Invalid website (score: ${websiteScore} < 20) - skipping scrape`);
+    return {
+      shouldScrape: false,
+      reason: `Invalid website (score: ${websiteScore} < 20)`,
     };
   }
 
   return {
     shouldScrape: true,
-    reason: "Custom domain detected",
+    reason: "Valid custom domain (score >= 20)",
   };
 }
 
 /**
- * Scrape a single website (with smart filtering)
+ * Scrape a single website (with ULTRA STRICT filtering)
  */
 export async function smartScrape(
   name: string,
-  url: string
+  url: string,
+  websiteScore?: number
 ): Promise<ScraperResult> {
-  // Check if we should scrape
-  const decision = shouldScrape(url);
+  // ULTRA STRICT: Check if we should scrape
+  const decision = shouldScrape(url, websiteScore);
 
   if (!decision.shouldScrape) {
     console.log(`⏭️  Skipping scrape for ${name}: ${decision.reason}`);
@@ -62,8 +74,8 @@ export async function smartScrape(
     };
   }
 
-  // Scrape with Cheerio
-  console.log(`🌐 Scraping ${name}: ${url}`);
+  // Only scrape validated custom domains
+  console.log(`🌐 Scraping ${name}: ${url} (validated, score: ${websiteScore || 'unknown'})`);
 
   try {
     const scrapedData = await batchScrapeWithCheerio(
@@ -85,7 +97,7 @@ export async function smartScrape(
       };
     }
 
-    console.log(`⚠️  Scraping failed for ${name}, will use estimation`);
+    console.log(`⚠️  Scraping failed for ${name}, fallback to estimation`);
     return {
       success: false,
       source: "estimated",
@@ -102,29 +114,29 @@ export async function smartScrape(
 }
 
 /**
- * Batch scrape with smart filtering
+ * Batch scrape with ULTRA STRICT filtering
  */
 export async function batchSmartScrape(
-  targets: Array<{ name: string; website: string }>
+  targets: Array<{ name: string; website: string; websiteScore?: number }>
 ): Promise<Map<string, ScraperResult>> {
   const results = new Map<string, ScraperResult>();
 
-  // Filter targets: only scrape custom domains
+  // ULTRA STRICT: Filter targets - only scrape validated domains with score >= 20
   const scrapableTargets = targets.filter((target) =>
-    shouldScrape(target.website).shouldScrape
+    shouldScrape(target.website, target.websiteScore).shouldScrape
   );
 
   const skippedTargets = targets.filter(
-    (target) => !shouldScrape(target.website).shouldScrape
+    (target) => !shouldScrape(target.website, target.websiteScore).shouldScrape
   );
 
   console.log(
-    `\n🤖 Smart Scraper: ${scrapableTargets.length} scrapable, ${skippedTargets.length} skipped`
+    `\n🤖 ULTRA STRICT Scraper: ${scrapableTargets.length} validated, ${skippedTargets.length} rejected/blocked`
   );
 
   // Mark skipped targets
   for (const target of skippedTargets) {
-    const decision = shouldScrape(target.website);
+    const decision = shouldScrape(target.website, target.websiteScore);
     console.log(`⏭️  ${target.name}: ${decision.reason}`);
 
     results.set(target.name, {
@@ -134,7 +146,7 @@ export async function batchSmartScrape(
     });
   }
 
-  // Scrape valid targets
+  // Scrape only validated targets
   if (scrapableTargets.length > 0) {
     try {
       const scrapedData = await batchScrapeWithCheerio(scrapableTargets, 2);
@@ -162,7 +174,7 @@ export async function batchSmartScrape(
     } catch (error: any) {
       console.error(`❌ Batch scraping error: ${error.message}`);
 
-      // Mark all as failed
+      // Mark all as failed (fallback to estimation)
       for (const target of scrapableTargets) {
         if (!results.has(target.name)) {
           results.set(target.name, {

@@ -4,8 +4,9 @@
  */
 
 import { multiQuerySearch } from "./braveClient";
-import { classifyWebsite, selectBestUrl } from "./domainClassifier";
+import { classifyWebsite, selectBestUrl, isBlacklistedDomain } from "./domainClassifier";
 import { sleepWithJitter } from "@/lib/utils/sleep";
+import { fetchHtml } from "@/lib/utils/fetchHtml";
 
 export interface DiscoveredWebsite {
   homepage?: string;
@@ -18,38 +19,7 @@ export interface DiscoveredWebsite {
   error?: string;
 }
 
-/**
- * Fetch HTML content for classification
- */
-async function fetchHtmlForClassification(url: string): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      },
-      redirect: "follow",
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const html = await response.text();
-    return html;
-  } catch (error: any) {
-    console.log(`   ⚠️  Failed to fetch HTML: ${error.message}`);
-    return null;
-  }
-}
+// Removed - now using lib/utils/fetchHtml.ts
 
 /**
  * Find services/menu pages from homepage
@@ -120,59 +90,62 @@ export async function discoverWebsite(
       };
     }
 
-    // Step 2: Select best candidate URL
-    const candidateUrl = selectBestUrl(
-      searchResults.map((r) => r.url),
-      name
-    );
+    // Step 2: Get top 3 candidates (not just 1)
+    const candidateUrls = searchResults
+      .map((r) => r.url)
+      .filter((url) => !isBlacklistedDomain(url))
+      .slice(0, 3);
 
-    if (!candidateUrl) {
-      console.log(`   ❌ No valid candidate URLs`);
+    if (candidateUrls.length === 0) {
+      console.log(`   ❌ All candidates are blocked domains`);
       return {
         searchQuery: `${name} ${address}`,
         success: false,
         confidence: "low",
         score: 0,
-        error: "NO_VALID_CANDIDATES",
+        error: "ALL_BLOCKED",
       };
     }
 
-    console.log(`   🎯 Candidate URL: ${candidateUrl}`);
+    console.log(`   🎯 Testing ${candidateUrls.length} candidates...`);
 
-    // Step 3: Fetch HTML for classification
-    console.log(`   📥 Fetching HTML for classification...`);
-    const html = await fetchHtmlForClassification(candidateUrl);
+    // Step 3: ULTRA STRICT - Fetch & classify ALL top 3 candidates
+    for (let i = 0; i < candidateUrls.length; i++) {
+      const candidateUrl = candidateUrls[i];
+      console.log(`\n   [${i + 1}/${candidateUrls.length}] Testing: ${candidateUrl}`);
 
-    if (!html) {
-      console.log(`   ⚠️  Could not fetch HTML, using domain-only classification`);
-    }
+      // Check if blocked
+      if (isBlacklistedDomain(candidateUrl)) {
+        console.log(`   ⚠️  Blocked directory domain - skipping`);
+        continue;
+      }
 
-    // Step 4: Classify website
-    console.log(`   🔍 Classifying website...`);
-    const classification = await classifyWebsite(candidateUrl, html || undefined);
+      // Fetch HTML
+      console.log(`   📥 Fetching HTML...`);
+      const html = await fetchHtml(candidateUrl, { timeout: 10000 });
 
-    console.log(
-      `   ${classification.isReal ? "✅" : "❌"} ${classification.reason} (score: ${classification.score})`
-    );
+      if (!html) {
+        console.log(`   ⚠️  Could not fetch HTML - skipping`);
+        continue;
+      }
 
-    if (!classification.isReal) {
-      return {
-        searchQuery: `${name} ${address}`,
-        success: false,
-        confidence: "low",
-        score: classification.score,
-        error: "INVALID_DOMAIN",
-      };
-    }
+      // Classify with STRICT validation
+      console.log(`   🔍 Classifying website (STRICT)...`);
+      const classification = await classifyWebsite(candidateUrl, html);
 
-    // Step 5: Find specialized pages (if we have HTML)
-    let servicesPage: string | undefined;
-    let menuPage: string | undefined;
+      // REJECT if score < 20 or not real
+      if (!classification.isReal || classification.score < 20) {
+        console.log(`   ❌ REJECTED: ${classification.reason}`);
+        continue;
+      }
 
-    if (html) {
+      // ACCEPTED! This is a real business website
+      console.log(`   ✅ ACCEPTED: Real business website`);
+
+      // Find specialized pages
       const specialPages = findSpecializedPages(html, candidateUrl);
-      servicesPage = specialPages.services;
-      menuPage = specialPages.menu;
+      const servicesPage = specialPages.services;
+      const menuPage = specialPages.menu;
 
       if (servicesPage) {
         console.log(`   📄 Found services page: ${servicesPage}`);
@@ -180,26 +153,36 @@ export async function discoverWebsite(
       if (menuPage) {
         console.log(`   📄 Found menu page: ${menuPage}`);
       }
+
+      // Determine confidence based on score
+      let confidence: "high" | "medium" | "low" = "medium";
+      if (classification.score >= 40) {
+        confidence = "high";
+      } else if (classification.score >= 25) {
+        confidence = "medium";
+      } else {
+        confidence = "low";
+      }
+
+      return {
+        homepage: candidateUrl,
+        servicesPage,
+        menuPage,
+        searchQuery: `${name} ${address}`,
+        success: true,
+        confidence,
+        score: classification.score,
+      };
     }
 
-    // Step 6: Determine confidence
-    let confidence: "high" | "medium" | "low" = "medium";
-    if (classification.score >= 30) {
-      confidence = "high";
-    } else if (classification.score >= 15) {
-      confidence = "medium";
-    } else if (classification.score >= 10) {
-      confidence = "low";
-    }
-
+    // All candidates failed
+    console.log(`   ❌ All candidates rejected (score < 20 or blocked)`);
     return {
-      homepage: candidateUrl,
-      servicesPage,
-      menuPage,
       searchQuery: `${name} ${address}`,
-      success: true,
-      confidence,
-      score: classification.score,
+      success: false,
+      confidence: "low",
+      score: 0,
+      error: "ALL_CANDIDATES_REJECTED",
     };
   } catch (error: any) {
     console.error(`   ❌ Discovery failed: ${error.message}`);
