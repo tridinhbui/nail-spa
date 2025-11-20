@@ -24,37 +24,63 @@ export interface ScrapeResult {
 }
 
 /**
- * Fetch HTML content with enhanced headers
+ * Fetch HTML content with enhanced headers and redirect loop detection
  */
-async function fetchHTML(url: string): Promise<string> {
+async function fetchHTML(
+  url: string,
+  redirectCount: number = 0,
+  visitedUrls: Set<string> = new Set()
+): Promise<string> {
+  // Prevent infinite redirect loops
+  if (redirectCount > 5) {
+    throw new Error("Too many redirects (>5)");
+  }
+
+  // Detect redirect loops
+  if (visitedUrls.has(url)) {
+    throw new Error("Redirect loop detected");
+  }
+
+  visitedUrls.add(url);
+
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith("https") ? https : http;
-    
+
     const requestOptions = {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"macOS"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1'
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        "Sec-Ch-Ua":
+          '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"macOS"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
       },
-      timeout: 10000 // 10s timeout
+      timeout: 10000, // 10s timeout
     };
 
     const req = protocol.get(url, requestOptions, (res) => {
-      // Handle redirects
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+      // Handle redirects with loop detection
+      if (
+        res.statusCode &&
+        res.statusCode >= 300 &&
+        res.statusCode < 400 &&
+        res.headers.location
+      ) {
         const redirectUrl = new URL(res.headers.location, url).href;
         console.log(`   ↪️ Redirecting to: ${redirectUrl}`);
-        fetchHTML(redirectUrl).then(resolve).catch(reject);
+        fetchHTML(redirectUrl, redirectCount + 1, visitedUrls)
+          .then(resolve)
+          .catch(reject);
         return;
       }
 
@@ -63,15 +89,15 @@ async function fetchHTML(url: string): Promise<string> {
         return;
       }
 
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => resolve(data));
     });
 
-    req.on('error', reject);
-    req.on('timeout', () => {
+    req.on("error", reject);
+    req.on("timeout", () => {
       req.destroy();
-      reject(new Error('Request timeout'));
+      reject(new Error("Request timeout"));
     });
   });
 }
@@ -155,11 +181,17 @@ function parseServices(html: string): ScrapedService[] {
     }
   });
 
-  // Strategy 2: Look for list items
+  // Strategy 2: Look for list items with nail keywords
   $('li').each((_, elem) => {
     const text = $(elem).text().replace(/\s+/g, ' ').trim();
+    const textLower = text.toLowerCase();
+    
+    // IMPROVED: Must contain nail-related keywords
+    const nailKeywords = ['manicure', 'pedicure', 'gel', 'acrylic', 'nail', 'nails', 'polish', 'dip', 'powder'];
+    const hasNailKeyword = nailKeywords.some(kw => textLower.includes(kw));
+    
     const prices = extractPrices(text);
-    if (prices.length > 0) {
+    if (prices.length > 0 && hasNailKeyword) {
       const name = text.replace(/[\$\d.,]+.*/, '').trim(); // Remove price part
       if (name.length > 3 && name.length < 100) {
         services.push({ name, price: prices[0] });
@@ -167,15 +199,21 @@ function parseServices(html: string): ScrapedService[] {
     }
   });
 
-  // Strategy 3: Look for div/p with price patterns
-  $('div, p, span').each((_, elem) => {
+  // Strategy 3: Look for h1-h6 and div/p/span with price patterns + nail keywords
+  $('h1, h2, h3, h4, h5, h6, div, p, span').each((_, elem) => {
     // Only check leaf nodes or nodes with minimal children
     if ($(elem).children().length > 2) return;
 
     const text = $(elem).text().replace(/\s+/g, ' ').trim();
+    const textLower = text.toLowerCase();
+    
+    // IMPROVED: Must contain nail-related keywords
+    const nailKeywords = ['manicure', 'pedicure', 'gel', 'acrylic', 'nail', 'nails', 'polish', 'dip', 'powder', 'spa'];
+    const hasNailKeyword = nailKeywords.some(kw => textLower.includes(kw));
+    
     const prices = extractPrices(text);
     
-    if (prices.length > 0) {
+    if (prices.length > 0 && hasNailKeyword) {
       // Try to find name in the same element or previous sibling
       let name = text.replace(/[\$\d.,]+.*/, '').trim();
       
@@ -220,6 +258,29 @@ export async function scrapeWithCheerio(
     // Fetch HTML
     const html = await fetchHTML(url);
     console.log(`   ✅ Fetched ${html.length} bytes`);
+
+    // CRITICAL: Check if page is too small (JS-only or empty)
+    if (html.length < 5000) {
+      console.log(`   ⚠️  Page too small (${html.length} < 5000) - likely JS-only site`);
+      return result;
+    }
+
+    // CRITICAL: Reject directory pages even after fetching
+    const htmlLower = html.toLowerCase();
+    const directoryKeywords = [
+      "directory",
+      "find businesses",
+      "business listings",
+      "review site",
+      "sponsored listing",
+    ];
+
+    for (const keyword of directoryKeywords) {
+      if (htmlLower.includes(keyword)) {
+        console.log(`   ❌ Rejected: Contains "${keyword}" - directory page`);
+        return result;
+      }
+    }
 
     // Parse services
     const services = parseServices(html);

@@ -7,6 +7,12 @@ import { multiQuerySearch } from "./braveClient";
 import { classifyWebsite, selectBestUrl, isBlacklistedDomain } from "./domainClassifier";
 import { sleepWithJitter } from "@/lib/utils/sleep";
 import { fetchHtml } from "@/lib/utils/fetchHtml";
+import {
+  extractServiceLinks,
+  selectBestServicePage,
+  isLikelyJsOnlyPage,
+  containsDirectoryPatterns,
+} from "@/lib/utils/extractServiceLinks";
 
 export interface DiscoveredWebsite {
   homepage?: string;
@@ -21,49 +27,7 @@ export interface DiscoveredWebsite {
 
 // Removed - now using lib/utils/fetchHtml.ts
 
-/**
- * Find services/menu pages from homepage
- */
-function findSpecializedPages(
-  html: string,
-  baseUrl: string
-): { services?: string; menu?: string } {
-  const htmlLower = html.toLowerCase();
-  const result: { services?: string; menu?: string } = {};
-
-  // Look for services page links
-  const servicesPatterns = [
-    /href="([^"]*services[^"]*)"/i,
-    /href="([^"]*pricing[^"]*)"/i,
-    /href="([^"]*prices[^"]*)"/i,
-  ];
-
-  for (const pattern of servicesPatterns) {
-    const match = html.match(pattern);
-    if (match && match[1]) {
-      const url = new URL(match[1], baseUrl).href;
-      result.services = url;
-      break;
-    }
-  }
-
-  // Look for menu page links
-  const menuPatterns = [
-    /href="([^"]*menu[^"]*)"/i,
-    /href="([^"]*price-list[^"]*)"/i,
-  ];
-
-  for (const pattern of menuPatterns) {
-    const match = html.match(pattern);
-    if (match && match[1]) {
-      const url = new URL(match[1], baseUrl).href;
-      result.menu = url;
-      break;
-    }
-  }
-
-  return result;
-}
+// Removed - now using extractServiceLinks from utils
 
 /**
  * Discover real business website for a competitor
@@ -142,16 +106,46 @@ export async function discoverWebsite(
       // ACCEPTED! This is a real business website
       console.log(`   ✅ ACCEPTED: Real business website`);
 
-      // Find specialized pages
-      const specialPages = findSpecializedPages(html, candidateUrl);
-      const servicesPage = specialPages.services;
-      const menuPage = specialPages.menu;
-
-      if (servicesPage) {
-        console.log(`   📄 Found services page: ${servicesPage}`);
+      // CRITICAL: Check if page is JS-only or contains directory patterns
+      if (isLikelyJsOnlyPage(html)) {
+        console.log(`   ⚠️  Page is too small (<5000 chars) - likely JS-only, extracting links...`);
       }
-      if (menuPage) {
-        console.log(`   📄 Found menu page: ${menuPage}`);
+
+      if (containsDirectoryPatterns(html)) {
+        console.log(`   ⚠️  Contains directory patterns - rejecting`);
+        continue; // Try next candidate
+      }
+
+      // SERVICE PAGE DISCOVERY: Extract internal service/pricing/menu links
+      console.log(`   🔍 Discovering service pages...`);
+      const serviceLinks = extractServiceLinks(html, candidateUrl);
+
+      console.log(`   📄 Found ${serviceLinks.length} potential service links`);
+
+      // Select best service page
+      const bestServicePage = selectBestServicePage(serviceLinks);
+
+      let servicesPage: string | undefined;
+      let menuPage: string | undefined;
+
+      if (bestServicePage) {
+        console.log(`   ✅ Best service page: ${bestServicePage}`);
+        servicesPage = bestServicePage;
+
+        // If we found multiple links, try to find a menu page too
+        const otherLinks = serviceLinks.filter((link) => link !== bestServicePage);
+        const menuLink = otherLinks.find(
+          (link) =>
+            link.toLowerCase().includes("menu") ||
+            link.toLowerCase().includes("price-list")
+        );
+
+        if (menuLink) {
+          menuPage = menuLink;
+          console.log(`   ✅ Menu page: ${menuPage}`);
+        }
+      } else {
+        console.log(`   ⚠️  No service pages found in HTML`);
       }
 
       // Determine confidence based on score

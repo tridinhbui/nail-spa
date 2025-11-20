@@ -114,10 +114,16 @@ export async function smartScrape(
 }
 
 /**
- * Batch scrape with ULTRA STRICT filtering
+ * Batch scrape with ULTRA STRICT filtering + Service Page Priority
  */
 export async function batchSmartScrape(
-  targets: Array<{ name: string; website: string; websiteScore?: number }>
+  targets: Array<{
+    name: string;
+    website: string;
+    websiteScore?: number;
+    servicesPage?: string;
+    menuPage?: string;
+  }>
 ): Promise<Map<string, ScraperResult>> {
   const results = new Map<string, ScraperResult>();
 
@@ -146,10 +152,34 @@ export async function batchSmartScrape(
     });
   }
 
-  // Scrape only validated targets
+  // Scrape only validated targets (PRIORITIZE SERVICE PAGES)
   if (scrapableTargets.length > 0) {
+    // CRITICAL: Use servicesPage or menuPage if available, fallback to homepage
+    const scrapingTargets = scrapableTargets.map((target) => {
+      // Priority: servicesPage > menuPage > homepage
+      const scrapeUrl =
+        target.servicesPage ||
+        target.menuPage ||
+        target.website;
+
+      const pageType = target.servicesPage
+        ? "services page"
+        : target.menuPage
+        ? "menu page"
+        : "homepage";
+
+      console.log(
+        `   📄 ${target.name}: Scraping ${pageType} → ${scrapeUrl}`
+      );
+
+      return {
+        name: target.name,
+        website: scrapeUrl,
+      };
+    });
+
     try {
-      const scrapedData = await batchScrapeWithCheerio(scrapableTargets, 2);
+      const scrapedData = await batchScrapeWithCheerio(scrapingTargets, 2);
 
       for (const target of scrapableTargets) {
         const result = scrapedData.get(target.name);
