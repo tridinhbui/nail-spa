@@ -127,18 +127,61 @@ export async function POST(request: NextRequest) {
       
       const competitors = competitorsWithScore.slice(0, competitorCount);
 
-      // 🤖 LIGHTWEIGHT WEB SCRAPING: Using Cheerio (works on Vercel)
-      console.log(`🧠 Starting web scraping for ${competitors.length} competitors...`);
+      // 🔍 STEP 2: VALIDATE WEBSITES (Detect social media / invalid URLs)
+      console.log(`\n🔍 Step 2: Validating websites...`);
+      const { validateWebsite } = await import("@/lib/scraping/website-validator");
+      
+      const validationResults = new Map<string, any>();
+      competitors.forEach(comp => {
+        const validation = validateWebsite(comp.website);
+        validationResults.set(comp.name, validation);
+        
+        if (!validation.isValid) {
+          console.log(`⚠️  Invalid website for ${comp.name}: ${validation.reason} (${comp.website})`);
+        }
+      });
+
+      // 🔍 STEP 3: DISCOVER REAL WEBSITES (For invalid ones, use Bing Search)
+      console.log(`\n🔍 Step 3: Discovering real websites with Bing Search...`);
+      const { findRealWebsite } = await import("@/lib/scraping/bing-website-finder");
+      
+      const needsDiscovery = competitors.filter(comp => {
+        const validation = validationResults.get(comp.name);
+        return !validation?.isValid;
+      });
+      
+      console.log(`🎯 ${needsDiscovery.length} competitors need website discovery`);
+      
+      if (needsDiscovery.length > 0) {
+        for (const comp of needsDiscovery) {
+          const discovered = await findRealWebsite(comp.name, comp.address, comp.phone);
+          
+          if (discovered.success && discovered.homepage) {
+            console.log(`✅ Found real website for ${comp.name}: ${discovered.homepage}`);
+            comp.website = discovered.homepage;
+            comp.discoveredWebsite = true;
+            comp.servicesPage = discovered.servicesPage;
+            comp.menuPage = discovered.menuPage;
+          } else {
+            console.log(`❌ Could not find website for ${comp.name}`);
+            comp.discoveredWebsite = false;
+          }
+        }
+      }
+
+      // 🤖 STEP 4: WEB SCRAPING (Cheerio for static, fallback to estimation)
+      console.log(`\n🧠 Step 4: Starting web scraping for ${competitors.length} competitors...`);
       let scrapedPricesMap = new Map();
       
       try {
         const { batchScrapeWithCheerio } = await import("@/lib/scraping/cheerio-scraper");
         
+        // Prioritize services/menu pages if discovered, otherwise use homepage
         const scrapingTargets = competitors
           .filter(comp => comp.website && comp.website !== "#")
           .map(comp => ({
             name: comp.name,
-            website: comp.website
+            website: comp.servicesPage || comp.menuPage || comp.website
           }));
         
         console.log(`🎯 ${scrapingTargets.length} competitors have websites to scrape`);
@@ -159,10 +202,15 @@ export async function POST(request: NextRequest) {
         // Continue without prices
       }
       
-      // 📊 SMART ESTIMATION & MERGING
+      // 📊 STEP 5: SMART FALLBACK & ESTIMATION
+      console.log(`\n📊 Step 5: Applying prices (scraped or estimated)...`);
+      
       competitors.forEach(comp => {
         const scrapedData = scrapedPricesMap.get(comp.name);
-        const priceLevel = comp.priceLevel || 2; // Default to $$
+        
+        // Extract price level from priceRange string ($, $$, $$$, $$$$)
+        const priceLevelMap: Record<string, number> = { "$": 1, "$$": 2, "$$$": 3, "$$$$": 4 };
+        const priceLevel = priceLevelMap[comp.priceRange] || 2;
         
         // Price estimation based on tier ($, $$, $$$, $$$$)
         const estimates = {
@@ -179,8 +227,9 @@ export async function POST(request: NextRequest) {
 
         const isEstimated = !scrapedData?.success;
 
-        console.log(`🏷️ Pricing for ${comp.name}:`, {
-          source: isEstimated ? 'Estimated (Tier based)' : 'Scraped (Real website)',
+        console.log(`🏷️ ${comp.name}:`, {
+          source: isEstimated ? 'Estimated (Tier)' : 'Scraped (Real)',
+          website: comp.discoveredWebsite ? 'Discovered via Bing' : 'From Google Places',
           gel: gelPrice,
           pedi: pediPrice,
           acrylic: acrylicPrice
